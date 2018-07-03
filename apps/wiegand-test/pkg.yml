@@ -1,0 +1,12 @@
+pkg.name: apps/wiegand-test
+pkg.type: app
+pkg.description: Wiegand test application.
+pkg.author: "Jeremy Wood <jeremy@proxy.co>"
+pkg.homepage:
+pkg.keywords:
+
+pkg.deps:
+    - "@apache-mynewt-core/kernel/os"
+    - "@apache-mynewt-core/hw/hal"
+    - "@apache-mynewt-core/sys/console/full"
+    - "lib/wiegand"

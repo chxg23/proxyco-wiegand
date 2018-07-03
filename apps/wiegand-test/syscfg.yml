@@ -1,0 +1,3 @@
+syscfg.vals:
+  WIEGAND_D0_PIN: 29
+  WIEGAND_D1_PIN: 30
