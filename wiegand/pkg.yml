@@ -1,4 +1,4 @@
-pkg.name: "lib/wiegand"
+pkg.name: "wiegand"
 pkg.description: "Wiegand interface and protocol library"
 pkg.author: "Jeremy Wood <jeremy@proxy.co>"
 pkg.homepage: "https://proxy.co"
