@@ -11,6 +11,7 @@
 #include <bsp/bsp.h>
 #include <ringbuf/ringbuf.h>
 #include "console/console.h"
+#include "wiegand/wiegand.h"
 #include "wiegand/wiegand_log.h"
 
 /* Debug LED */
@@ -27,7 +28,7 @@ struct hal_timer g_task1_timer;
 uint32_t g_task1_loops;
 
 #define WIEGAND_MSG_BUF_COUNT (10)
-#define WIEGAND_MSG_BUF_SIZE (sizeof(struct wiegand_msg) * WIEGAND_MSG_BUF_COUNT);
+#define WIEGAND_MSG_BUF_SIZE (sizeof(struct wiegand_msg) * WIEGAND_MSG_BUF_COUNT)
 
 static uint8_t wiegand_out_buf[WIEGAND_MSG_BUF_SIZE] = {0};
 static struct ringbuf wiegand_out_rb;
