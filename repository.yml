@@ -1,7 +1,0 @@
-repo.name: wiegand
-repo.versions:
-    "0.0.0": "master"
-
-repo.newt_compatibility:
-    0.0.0:
-        1.1.0: good

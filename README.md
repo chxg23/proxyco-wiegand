@@ -1,2 +1,0 @@
-# wiegand
-Wiegand communication library
