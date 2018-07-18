@@ -8,7 +8,8 @@ void wiegand_toggle(void);
 #define WIEGAND_MSG_MAX_LEN 200
 #define WIEGAND_MSG_MAX_BYTES (WIEGAND_MSG_MAX_LEN/8)
 
-struct wiegand_msg {
+typedef struct {
   uint8_t bit_len;
-  uint8_t bodys[WIEGAND_MSG_MAX_BYTES];
-};
+  uint8_t len;
+  uint8_t data[WIEGAND_MSG_MAX_BYTES];
+} wiegand_msg_t;

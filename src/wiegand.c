@@ -6,13 +6,83 @@
  *
  */
 #include <assert.h>
-#include "hal/hal_gpio.h"
-#include "hal/hal_timer.h"
+#include <hal/hal_gpio.h>
+#include <hal/hal_timer.h>
 #include <bsp/bsp.h>
 #include <ringbuf/ringbuf.h>
-#include "console/console.h"
+#include <string.h>
+#include <console/console.h>
 #include "wiegand/wiegand.h"
 #include "wiegand/wiegand_log.h"
+
+#define WIEGAND_BUFFER (10)
+
+
+typedef struct jerRingbufferType
+{
+	wiegand_msg_t buffer[WIEGAND_BUFFER];
+	volatile uint32_t head;		// Index of ringbuffer head.
+	volatile uint32_t tail;		// Index of ringbuffer tail.
+}jerRingbufferType, *jerRingbufferPtr;
+
+// Initialize jerRingbuffer at ringbufferPtr
+void jerRingbufferInit(jerRingbufferPtr ringbufferPtr);
+
+// Try to enqueue hidMsgPtr into ringbufferPtr. True on success.
+bool jerRingbufferEnqueue(jerRingbufferPtr ringbufferPtr, wiegand_msg_t *wiegand_msg);
+
+// Try to dequeue hidMsgPtr from ringbufferPtr. True on success.
+bool jerRingbufferDequeue(jerRingbufferPtr ringbufferPtr, wiegand_msg_t *wiegand_msg);
+
+void jerRingbufferInit
+(
+	jerRingbufferPtr ringbufferPtr
+)
+{
+	memset(ringbufferPtr, 0, sizeof(jerRingbufferType));
+
+	ringbufferPtr->head = 0;
+	ringbufferPtr->tail = 0;
+}
+
+bool jerRingbufferEnqueue
+(
+	jerRingbufferPtr ringbufferPtr,
+	wiegand_msg_t *msg
+)
+{
+    uint32_t nextHidMsgFIFOHead = (ringbufferPtr->head + 1) % WIEGAND_BUFFER;
+
+    if (nextHidMsgFIFOHead != ringbufferPtr->tail)
+    {
+        memcpy(ringbufferPtr->buffer[ringbufferPtr->head].data, msg, sizeof(wiegand_msg_t));
+        ringbufferPtr->head = nextHidMsgFIFOHead;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool jerRingbufferDequeue
+(
+	jerRingbufferPtr ringbufferPtr,
+	wiegand_msg_t *msg
+)
+{
+    if (ringbufferPtr->head != ringbufferPtr->tail)
+    {
+        memcpy(msg, ringbufferPtr->buffer[ringbufferPtr->tail].data, sizeof(wiegand_msg_t));
+        ringbufferPtr->tail = (ringbufferPtr->tail + 1) % WIEGAND_BUFFER; // Increment readPos, loop if needed.
+
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
 
 /* Debug LED */
 int g_led1_pin;
@@ -21,33 +91,80 @@ int g_led1_pin;
 int g_d0_pin;
 int g_d1_pin;
 
-#define TASK1_TIMER_NUM     (1)
-#define TASK1_TIMER_FREQ    (100000)
-
-struct hal_timer g_task1_timer;
+struct hal_timer g_wiegand_timer;
 uint32_t g_task1_loops;
 
-#define WIEGAND_MSG_BUF_COUNT (10)
-#define WIEGAND_MSG_BUF_SIZE (sizeof(struct wiegand_msg) * WIEGAND_MSG_BUF_COUNT)
+uint32_t g_timer_resolution = 0;  /* Actual timer resolution achieved. */
+uint32_t g_pulse_ticks = 0;       /* Timer ticks per pulse. */
+uint32_t g_period_ticks = 0;      /* Timer ticks per period between pulses. */
+uint32_t g_msg_wait_ticks = 0;    /* Minimum timer ticks between sending messages. */
 
-static uint8_t wiegand_out_buf[WIEGAND_MSG_BUF_SIZE] = {0};
-static struct ringbuf wiegand_out_rb;
+#define WIEGAND_MSG_BUF_COUNT (10)
+#define WIEGAND_MSG_BUF_SIZE (sizeof(wiegand_msg_t) * WIEGAND_MSG_BUF_COUNT)
+
+// static uint8_t wiegand_out_buf[WIEGAND_MSG_BUF_SIZE] = {0};
+// static struct ringbuf wiegand_out_rb;
+
+static jerRingbufferType wiegand_buffer = {0};
+
+//static uint8_t wiegand_data[8] = {0xDE, 0xAD, 0xBE, 0xEF};
 
 void
-wiegand_write_cb(void *arg)
+wiegand_timer_cb(void *arg)
 {
-  static uint32_t count = 0;
+  static int bit_index = 0;
+  static int pulse_pin;
+  static int in_pulse = 0;
+  static wiegand_msg_t msg = {0};
 
-  count++;
-
-  if (count > 1000)
-  {
-    /* Toggle the LED */
-    hal_gpio_toggle(g_led1_pin);
-    count = 0;
+  if (msg.bit_len == 0) {
+    /* No current message, but there may be one waiting. */
+    if (jerRingbufferDequeue(&wiegand_buffer, &msg)) {
+      hal_gpio_write(g_led1_pin, 1);
+    } else {
+      /* No messages waiting. Sleep the timer for a while. */
+      hal_timer_start(&g_wiegand_timer, 2000);
+      return;
+    }
   }
 
-  hal_timer_start(&g_task1_timer, 10);
+  /* We're in the process of sending a Wiegand message. */
+
+  if (in_pulse)
+  {
+    hal_gpio_write(pulse_pin, 1);
+    in_pulse = 0;
+    bit_index++;
+
+    if (bit_index > msg.bit_len)
+    {
+      /* Message complete, this was the last pulse. */
+      bit_index = 0;
+      msg.bit_len = 0;
+
+      /* Message complete, sleep the timer. TODO: Should this be a much longer, specific wait? */
+      hal_gpio_write(g_led1_pin, 0);
+      hal_timer_start(&g_wiegand_timer, 20000);
+      return;
+    }
+
+    hal_timer_start(&g_wiegand_timer, g_period_ticks);
+    return;
+  }
+
+  if ( (msg.data[bit_index / 8] & (1 << (bit_index % 8) )) != 0 )
+  {
+    pulse_pin = g_d1_pin;
+  }
+  else
+  {
+    pulse_pin = g_d0_pin;
+  }
+
+  hal_gpio_write(pulse_pin, 0);
+  in_pulse = 1;
+  hal_timer_start(&g_wiegand_timer, g_pulse_ticks);
+
 }
 
 /* Initialize wiegand output, using pins d0_pin and d1_pin. The  */
@@ -73,48 +190,70 @@ wiegand_init(void)
       g_d1_pin);
 
   g_led1_pin = LED_BLINK_PIN;
-  hal_gpio_init_out(g_led1_pin, 1);
+  hal_gpio_init_out(g_led1_pin, HAL_GPIO_PULL_NONE);
+  hal_gpio_write(g_led1_pin, 0);
 
-  rc = rb_init(&wiegand_out_rb, wiegand_out_buf, sizeof(wiegand_out_buf), WIEGAND_MSG_BUF_COUNT);
-  assert(rc == 0);
+//   rc = rb_init(&wiegand_out_rb, wiegand_out_buf, sizeof(wiegand_out_buf), sizeof(wiegand_msg_t));
+//   assert(rc == 0);
 
+  jerRingbufferInit(&wiegand_buffer);
+
+  /* Each platform will require timer configuration. */
 #ifdef NRF52
-  /* Configure hal_timer to handle sending out pulses. */
-  rc = hal_timer_config(TASK1_TIMER_NUM, TASK1_TIMER_FREQ);
+  /* Timer frequency value. */
+  #define NRF_TIMER_FREQ    (400000)
+  /* Timer adjust offset, empirically determined. */
+  #define NRF_TIMER_ADJ     (4)
+
+  rc = hal_timer_config(MYNEWT_VAL(WIEGAND_NRF_TIMER), NRF_TIMER_FREQ);
   assert(rc == 0);
 
-  console_printf("wiegand_init: Freq: %d Rez: %lu\n",
-    TASK1_TIMER_FREQ,
-    hal_timer_get_resolution(TASK1_TIMER_NUM)
+  g_timer_resolution = hal_timer_get_resolution(MYNEWT_VAL(WIEGAND_NRF_TIMER));
+
+  g_pulse_ticks = (MYNEWT_VAL(WIEGAND_PULSE_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
+  g_period_ticks = (MYNEWT_VAL(WIEGAND_PERIOD_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
+  g_msg_wait_ticks = (MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
+
+  console_printf("wiegand_init: nRF Timer - Freq: %d Rez: %lu, pulse_ticks: %lu, period_ticks: %lu\n",
+    NRF_TIMER_FREQ,
+    g_timer_resolution,
+    g_pulse_ticks,
+    g_period_ticks
   );
 
-  hal_timer_set_cb(TASK1_TIMER_NUM, &g_task1_timer, wiegand_write_cb, NULL);
+  hal_timer_set_cb(MYNEWT_VAL(WIEGAND_NRF_TIMER), &g_wiegand_timer, wiegand_timer_cb, NULL);
   assert(rc == 0);
 
-//   rc = hal_timer_start(&g_task1_timer, TASK1_TIMER_FREQ);
-//   assert(rc == 0);
+  rc = hal_timer_start(&g_wiegand_timer, 1);
+  assert(rc == 0);
 #endif
 }
 
 void
 wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
 {
-  int pin_to_pulse;
+  assert(wiegand_data != NULL);
 
-  for (int i = 0; i < wiegand_bits; i++)
-  {
-    if ( (wiegand_data[i / 8] & (1 << (i % 8) )) != 0 )
-    {
-      pin_to_pulse = g_d1_pin;
-    }
-    else
-    {
-      pin_to_pulse = g_d0_pin;
-    }
-
-    hal_gpio_write(pin_to_pulse, 0);
-    os_cputime_delay_usecs(MYNEWT_VAL(WIEGAND_PULSE_LEN));
-    hal_gpio_write(pin_to_pulse, 1);
-    os_cputime_delay_usecs(MYNEWT_VAL(WIEGAND_PERIOD_LEN));
+  if (wiegand_bits > WIEGAND_MSG_MAX_LEN) {
+    console_printf("wiegand_write: Too many bits, %lu > %d!\n", wiegand_bits, WIEGAND_MSG_MAX_LEN);
+    return;
   }
+
+  if (wiegand_bits * 8 > len) {
+    console_printf("wiegand_write: Not enough bytes! Bits %lu, Bytes %d!\n", wiegand_bits, len);
+    return;
+  }
+
+  console_printf("wiegand_write: %lu bits\n", wiegand_bits);
+
+  wiegand_msg_t msg = {0};
+
+  msg.bit_len = wiegand_bits;
+  msg.len = len;
+  memcpy(msg.data, wiegand_data, len);
+
+  jerRingbufferEnqueue(&wiegand_buffer, &msg);
+
+//  rb_append(&wiegand_out_rb, &msg, sizeof(wiegand_msg_t));
+
 }

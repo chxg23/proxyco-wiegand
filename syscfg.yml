@@ -14,3 +14,11 @@ syscfg.defs:
   WIEGAND_PERIOD_LEN:
     description: 'Length in microseconds of period between pulses.'
     value: 1000
+
+  WIEGAND_MSG_WAIT_LEN:
+    description: 'Minimum wait between Wiegand message sends, in microseconds.'
+    value: 100000
+
+  WIEGAND_NRF_TIMER:
+    description: 'Use this system timer. Only applies to nRF52 targets.'
+    value: 3
