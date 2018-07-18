@@ -17,13 +17,11 @@
 
 #define WIEGAND_BUFFER (10)
 
-
-typedef struct jerRingbufferType
-{
-	wiegand_msg_t buffer[WIEGAND_BUFFER];
-	volatile uint32_t head;		// Index of ringbuffer head.
-	volatile uint32_t tail;		// Index of ringbuffer tail.
-}jerRingbufferType, *jerRingbufferPtr;
+typedef struct jerRingbufferType {
+  wiegand_msg_t buffer[WIEGAND_BUFFER];
+  volatile uint32_t head;		// Index of ringbuffer head.
+  volatile uint32_t tail;		// Index of ringbuffer tail.
+} jerRingbufferType, *jerRingbufferPtr;
 
 // Initialize jerRingbuffer at ringbufferPtr
 void jerRingbufferInit(jerRingbufferPtr ringbufferPtr);
@@ -36,52 +34,47 @@ bool jerRingbufferDequeue(jerRingbufferPtr ringbufferPtr, wiegand_msg_t *wiegand
 
 void jerRingbufferInit
 (
-	jerRingbufferPtr ringbufferPtr
+    jerRingbufferPtr ringbufferPtr
 )
 {
-	memset(ringbufferPtr, 0, sizeof(jerRingbufferType));
+  memset(ringbufferPtr, 0, sizeof(jerRingbufferType));
 
-	ringbufferPtr->head = 0;
-	ringbufferPtr->tail = 0;
+  ringbufferPtr->head = 0;
+  ringbufferPtr->tail = 0;
 }
 
 bool jerRingbufferEnqueue
 (
-	jerRingbufferPtr ringbufferPtr,
-	wiegand_msg_t *msg
+    jerRingbufferPtr ringbufferPtr,
+    wiegand_msg_t *msg
 )
 {
-    uint32_t nextHidMsgFIFOHead = (ringbufferPtr->head + 1) % WIEGAND_BUFFER;
+  uint32_t nextHidMsgFIFOHead = (ringbufferPtr->head + 1) % WIEGAND_BUFFER;
 
-    if (nextHidMsgFIFOHead != ringbufferPtr->tail)
-    {
-        memcpy(ringbufferPtr->buffer[ringbufferPtr->head].data, msg, sizeof(wiegand_msg_t));
-        ringbufferPtr->head = nextHidMsgFIFOHead;
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+  if (nextHidMsgFIFOHead != ringbufferPtr->tail) {
+    memcpy(ringbufferPtr->buffer[ringbufferPtr->head].data, msg, sizeof(wiegand_msg_t));
+    ringbufferPtr->head = nextHidMsgFIFOHead;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 bool jerRingbufferDequeue
 (
-	jerRingbufferPtr ringbufferPtr,
-	wiegand_msg_t *msg
+    jerRingbufferPtr ringbufferPtr,
+    wiegand_msg_t *msg
 )
 {
-    if (ringbufferPtr->head != ringbufferPtr->tail)
-    {
-        memcpy(msg, ringbufferPtr->buffer[ringbufferPtr->tail].data, sizeof(wiegand_msg_t));
-        ringbufferPtr->tail = (ringbufferPtr->tail + 1) % WIEGAND_BUFFER; // Increment readPos, loop if needed.
+  if (ringbufferPtr->head != ringbufferPtr->tail) {
+    memcpy(msg, ringbufferPtr->buffer[ringbufferPtr->tail].data, sizeof(wiegand_msg_t));
+    ringbufferPtr->tail = (ringbufferPtr->tail + 1) %
+        WIEGAND_BUFFER; // Increment readPos, loop if needed.
 
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    return true;
+  } else {
+    return false;
+  }
 }
 
 /* Debug LED */
@@ -122,14 +115,12 @@ wiegand_timer_cb(void *arg)
 
   /* We're in the process of sending a Wiegand message. */
 
-  if (in_pulse)
-  {
+  if (in_pulse) {
     hal_gpio_write(pulse_pin, 1);
     in_pulse = 0;
     bit_index++;
 
-    if (bit_index > msg.bit_len)
-    {
+    if (bit_index > msg.bit_len) {
       /* Message complete, this was the last pulse. */
       bit_index = 0;
       msg.bit_len = 0;
@@ -144,12 +135,9 @@ wiegand_timer_cb(void *arg)
     return;
   }
 
-  if ( (msg.data[bit_index / 8] & (1 << (bit_index % 8) )) != 0 )
-  {
+  if ((msg.data[bit_index / 8] & (1 << (bit_index % 8))) != 0) {
     pulse_pin = g_d1_pin;
-  }
-  else
-  {
+  } else {
     pulse_pin = g_d0_pin;
   }
 
@@ -190,9 +178,9 @@ wiegand_init(void)
   /* Each platform will require timer configuration. */
 #ifdef NRF52
   /* Timer frequency value. */
-  #define NRF_TIMER_FREQ    (400000)
+#define NRF_TIMER_FREQ    (400000)
   /* Timer adjust offset, empirically determined. */
-  #define NRF_TIMER_ADJ     (4)
+#define NRF_TIMER_ADJ     (4)
 
   rc = hal_timer_config(MYNEWT_VAL(WIEGAND_NRF_TIMER), NRF_TIMER_FREQ);
   assert(rc == 0);
@@ -204,10 +192,10 @@ wiegand_init(void)
   g_msg_wait_ticks = (MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
 
   console_printf("wiegand_init: nRF Timer - Freq: %d Rez: %lu, pulse_ticks: %lu, period_ticks: %lu\n",
-    NRF_TIMER_FREQ,
-    g_timer_resolution,
-    g_pulse_ticks,
-    g_period_ticks
+      NRF_TIMER_FREQ,
+      g_timer_resolution,
+      g_pulse_ticks,
+      g_period_ticks
   );
 
   hal_timer_set_cb(MYNEWT_VAL(WIEGAND_NRF_TIMER), &g_wiegand_timer, wiegand_timer_cb, NULL);
