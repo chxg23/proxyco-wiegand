@@ -99,15 +99,7 @@ uint32_t g_pulse_ticks = 0;       /* Timer ticks per pulse. */
 uint32_t g_period_ticks = 0;      /* Timer ticks per period between pulses. */
 uint32_t g_msg_wait_ticks = 0;    /* Minimum timer ticks between sending messages. */
 
-#define WIEGAND_MSG_BUF_COUNT (10)
-#define WIEGAND_MSG_BUF_SIZE (sizeof(wiegand_msg_t) * WIEGAND_MSG_BUF_COUNT)
-
-// static uint8_t wiegand_out_buf[WIEGAND_MSG_BUF_SIZE] = {0};
-// static struct ringbuf wiegand_out_rb;
-
 static jerRingbufferType wiegand_buffer = {0};
-
-//static uint8_t wiegand_data[8] = {0xDE, 0xAD, 0xBE, 0xEF};
 
 void
 wiegand_timer_cb(void *arg)
@@ -193,9 +185,6 @@ wiegand_init(void)
   hal_gpio_init_out(g_led1_pin, HAL_GPIO_PULL_NONE);
   hal_gpio_write(g_led1_pin, 0);
 
-//   rc = rb_init(&wiegand_out_rb, wiegand_out_buf, sizeof(wiegand_out_buf), sizeof(wiegand_msg_t));
-//   assert(rc == 0);
-
   jerRingbufferInit(&wiegand_buffer);
 
   /* Each platform will require timer configuration. */
@@ -239,7 +228,7 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
     return;
   }
 
-  if (wiegand_bits * 8 > len) {
+  if (wiegand_bits / 8 > len) {
     console_printf("wiegand_write: Not enough bytes! Bits %lu, Bytes %d!\n", wiegand_bits, len);
     return;
   }
@@ -253,7 +242,4 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
   memcpy(msg.data, wiegand_data, len);
 
   jerRingbufferEnqueue(&wiegand_buffer, &msg);
-
-//  rb_append(&wiegand_out_rb, &msg, sizeof(wiegand_msg_t));
-
 }
