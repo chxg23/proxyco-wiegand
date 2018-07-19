@@ -1,4 +1,8 @@
 syscfg.defs:
+  WIEGAND_ACTIVE_LOW:
+    description: 'If this is set, the GPIO pins are driven active-low instead of active-high.'
+    value: 0
+
   WIEGAND_D0_PIN:
     description: 'GPIO pin to use for Wiegand Out D0'
     value: WIEGAND_NO_GPIO

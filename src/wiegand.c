@@ -17,6 +17,14 @@
 
 #define WIEGAND_BUFFER (10)
 
+#if MYNEWT_VAL(WIEGAND_ACTIVE_LOW)
+#define ACTIVE    0
+#define INACTIVE  1
+#else
+#define ACTIVE    1
+#define INACTIVE  0
+#endif
+
 typedef struct jerRingbufferType {
   wiegand_msg_t buffer[WIEGAND_BUFFER];
   volatile uint32_t head;		// Index of ringbuffer head.
@@ -84,6 +92,7 @@ int g_led1_pin;
 int g_d0_pin;
 int g_d1_pin;
 
+
 struct hal_timer g_wiegand_timer;
 uint32_t g_task1_loops;
 
@@ -116,7 +125,8 @@ wiegand_timer_cb(void *arg)
   /* We're in the process of sending a Wiegand message. */
 
   if (in_pulse) {
-    hal_gpio_write(pulse_pin, 1);
+    /* Pulse complete, pin goes back to active. */
+    hal_gpio_write(pulse_pin, ACTIVE);
     in_pulse = 0;
     bit_index++;
 
@@ -140,7 +150,8 @@ wiegand_timer_cb(void *arg)
     pulse_pin = g_d0_pin;
   }
 
-  hal_gpio_write(pulse_pin, 0);
+  /* Start pulse by setting pin inactive. */
+  hal_gpio_write(pulse_pin, INACTIVE);
   in_pulse = 1;
   hal_timer_start(&g_wiegand_timer, g_pulse_ticks);
 
@@ -161,8 +172,8 @@ wiegand_init(void)
   rc = hal_gpio_init_out(g_d1_pin, HAL_GPIO_PULL_NONE);
   assert(rc == 0);
 
-  hal_gpio_write(g_d0_pin, 1);
-  hal_gpio_write(g_d1_pin, 1);
+  hal_gpio_write(g_d0_pin, ACTIVE);
+  hal_gpio_write(g_d1_pin, ACTIVE);
 
   console_printf("wiegand_init: D0: %d, D1: %d. Ready\n",
       g_d0_pin,
