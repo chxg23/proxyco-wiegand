@@ -1,4 +1,4 @@
-pkg.name: "lib/wiegand"
+pkg.name: "wiegand"
 pkg.description: "Wiegand interface and protocol library"
 pkg.author: "Jeremy Wood <jeremy@proxy.co>"
 pkg.homepage: "https://proxy.co"
@@ -6,6 +6,5 @@ pkg.keywords:
     - wiegand
 
 pkg.deps:
-    - "lib/ringbuf"
     - "@apache-mynewt-core/hw/hal"
     - "@apache-mynewt-core/sys/log/full"

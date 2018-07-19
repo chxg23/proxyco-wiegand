@@ -9,7 +9,6 @@
 #include <hal/hal_gpio.h>
 #include <hal/hal_timer.h>
 #include <bsp/bsp.h>
-#include <ringbuf/ringbuf.h>
 #include <string.h>
 #include <console/console.h>
 #include "wiegand/wiegand.h"
