@@ -105,7 +105,7 @@ wiegand_timer_cb(void *arg)
   if (msg.bit_len == 0) {
     /* No current message, but there may be one waiting. */
     if (jerRingbufferDequeue(&wiegand_buffer, &msg)) {
-      hal_gpio_write(g_led1_pin, 1);
+      /* Message ready to send, will start sending below... */
     } else {
       /* No messages waiting. Sleep the timer for a while. */
       hal_timer_start(&g_wiegand_timer, 2000);
@@ -126,7 +126,6 @@ wiegand_timer_cb(void *arg)
       msg.bit_len = 0;
 
       /* Message complete, sleep the timer. TODO: Should this be a much longer, specific wait? */
-      hal_gpio_write(g_led1_pin, 0);
       hal_timer_start(&g_wiegand_timer, 20000);
       return;
     }
@@ -168,10 +167,6 @@ wiegand_init(void)
   console_printf("wiegand_init: D0: %d, D1: %d. Ready\n",
       g_d0_pin,
       g_d1_pin);
-
-  g_led1_pin = LED_BLINK_PIN;
-  hal_gpio_init_out(g_led1_pin, HAL_GPIO_PULL_NONE);
-  hal_gpio_write(g_led1_pin, 0);
 
   jerRingbufferInit(&wiegand_buffer);
 
