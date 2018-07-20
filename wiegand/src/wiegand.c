@@ -11,8 +11,8 @@
 #include <bsp/bsp.h>
 #include <string.h>
 #include <console/console.h>
-#include "wiegand/wiegand.h"
-#include "wiegand/wiegand_log.h"
+#include "wiegand.h"
+#include "wiegand_log.h"
 
 #define WIEGAND_BUFFER (10)
 
