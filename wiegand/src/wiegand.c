@@ -174,7 +174,7 @@ wiegand_init(void)
   hal_gpio_write(g_d0_pin, ACTIVE);
   hal_gpio_write(g_d1_pin, ACTIVE);
 
-  console_printf("wiegand_init: D0: %d, D1: %d. Ready\n",
+  WIEGAND_LOG(INFO, "wiegand_init: D0: %d, D1: %d. Ready\n",
       g_d0_pin,
       g_d1_pin);
 
@@ -196,7 +196,7 @@ wiegand_init(void)
   g_period_ticks = (MYNEWT_VAL(WIEGAND_PERIOD_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
   g_msg_wait_ticks = (MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
 
-  console_printf("wiegand_init: nRF Timer - Freq: %d Rez: %lu, pulse_ticks: %lu, period_ticks: %lu\n",
+  WIEGAND_LOG(INFO, "wiegand_init: nRF Timer - Freq: %d Rez: %lu, pulse_ticks: %lu, period_ticks: %lu\n",
       NRF_TIMER_FREQ,
       g_timer_resolution,
       g_pulse_ticks,
@@ -217,16 +217,16 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
   assert(wiegand_data != NULL);
 
   if (wiegand_bits > WIEGAND_MSG_MAX_LEN) {
-    console_printf("wiegand_write: Too many bits, %lu > %d!\n", wiegand_bits, WIEGAND_MSG_MAX_LEN);
+    WIEGAND_LOG(ERROR, "wiegand_write: Too many bits, %lu > %d!\n", wiegand_bits, WIEGAND_MSG_MAX_LEN);
     return;
   }
 
   if (wiegand_bits / 8 > len) {
-    console_printf("wiegand_write: Not enough bytes! Bits %lu, Bytes %d!\n", wiegand_bits, len);
+    WIEGAND_LOG(ERROR, "wiegand_write: Not enough bytes! Bits %lu, Bytes %d!\n", wiegand_bits, len);
     return;
   }
 
-  console_printf("wiegand_write: %lu bits\n", wiegand_bits);
+  WIEGAND_LOG(INFO, "wiegand_write: %lu bits\n", wiegand_bits);
 
   wiegand_msg_t msg = {0};
 
