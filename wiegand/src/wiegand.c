@@ -62,9 +62,9 @@ wiegand_timer_cb(void *arg)
       /* Message ready to send */
       memcpy(&msg, entry, sizeof(msg));
 
-     /* This doesn't seem right, but it doesn't seem like it's possible to empty a single item
-      * out of the ringbuf with rb_flush_to. */
-     if (entry == msg_buf_rb.head) {
+     if (entry == msg_buf_rb.head && entry == msg_buf_rb.tail) {
+       /* This doesn't seem right, but it doesn't seem like it's possible to empty a single item
+        * out of the ringbuf with rb_flush_to. */
        rb_flush(&msg_buf_rb);
      } else {
        rb_flush_to(&msg_buf_rb, entry + sizeof(msg));
@@ -102,9 +102,9 @@ wiegand_timer_cb(void *arg)
   }
 
   if ((msg.data[bit_index / 8] & (1 << (7 - bit_index % 8))) != 0) {
-    pulse_pin = g_d1_pin;
-  } else {
     pulse_pin = g_d0_pin;
+  } else {
+    pulse_pin = g_d1_pin;
   }
 
   /* Start pulse by setting pin inactive. */
