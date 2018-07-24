@@ -6,5 +6,6 @@ pkg.keywords:
     - wiegand
 
 pkg.deps:
+    - "@proxy/lib/ringbuf"
     - "@apache-mynewt-core/hw/hal"
     - "@apache-mynewt-core/sys/log/full"

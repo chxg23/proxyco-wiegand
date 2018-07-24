@@ -11,86 +11,29 @@
 #include <bsp/bsp.h>
 #include <string.h>
 #include <console/console.h>
+#include "ringbuf/ringbuf.h"
 #include "wiegand.h"
 #include "wiegand_log.h"
 
-#define WIEGAND_BUFFER (10)
-
+/* Active-high or Active-low logic is configurable. */
 #if MYNEWT_VAL(WIEGAND_ACTIVE_LOW)
-#define ACTIVE    0
-#define INACTIVE  1
+#define ACTIVE    (0)
+#define INACTIVE  (1)
 #else
-#define ACTIVE    1
-#define INACTIVE  0
+#define ACTIVE    (1)
+#define INACTIVE  (0)
 #endif
 
-typedef struct jerRingbufferType {
-  wiegand_msg_t buffer[WIEGAND_BUFFER];
-  volatile uint32_t head;		// Index of ringbuffer head.
-  volatile uint32_t tail;		// Index of ringbuffer tail.
-} jerRingbufferType, *jerRingbufferPtr;
+/* Buffer of outgoing Wiegand Messages */
+#define MSG_BUF_NUM (10)
+#define MSG_BUF_LEN (MSG_BUF_NUM * sizeof(wiegand_msg_t))
 
-// Initialize jerRingbuffer at ringbufferPtr
-void jerRingbufferInit(jerRingbufferPtr ringbufferPtr);
-
-// Try to enqueue hidMsgPtr into ringbufferPtr. True on success.
-bool jerRingbufferEnqueue(jerRingbufferPtr ringbufferPtr, wiegand_msg_t *wiegand_msg);
-
-// Try to dequeue hidMsgPtr from ringbufferPtr. True on success.
-bool jerRingbufferDequeue(jerRingbufferPtr ringbufferPtr, wiegand_msg_t *wiegand_msg);
-
-void jerRingbufferInit
-(
-    jerRingbufferPtr ringbufferPtr
-)
-{
-  memset(ringbufferPtr, 0, sizeof(jerRingbufferType));
-
-  ringbufferPtr->head = 0;
-  ringbufferPtr->tail = 0;
-}
-
-bool jerRingbufferEnqueue
-(
-    jerRingbufferPtr ringbufferPtr,
-    wiegand_msg_t *msg
-)
-{
-  uint32_t nextHidMsgFIFOHead = (ringbufferPtr->head + 1) % WIEGAND_BUFFER;
-
-  if (nextHidMsgFIFOHead != ringbufferPtr->tail) {
-    memcpy(ringbufferPtr->buffer[ringbufferPtr->head].data, msg, sizeof(wiegand_msg_t));
-    ringbufferPtr->head = nextHidMsgFIFOHead;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool jerRingbufferDequeue
-(
-    jerRingbufferPtr ringbufferPtr,
-    wiegand_msg_t *msg
-)
-{
-  if (ringbufferPtr->head != ringbufferPtr->tail) {
-    memcpy(msg, ringbufferPtr->buffer[ringbufferPtr->tail].data, sizeof(wiegand_msg_t));
-    ringbufferPtr->tail = (ringbufferPtr->tail + 1) %
-        WIEGAND_BUFFER; // Increment readPos, loop if needed.
-
-    return true;
-  } else {
-    return false;
-  }
-}
-
-/* Debug LED */
-int g_led1_pin;
+static uint8_t msg_buf[MSG_BUF_LEN] = {0};
+static struct ringbuf msg_buf_rb;
 
 /* GPIO Pins */
 int g_d0_pin;
 int g_d1_pin;
-
 
 struct hal_timer g_wiegand_timer;
 uint32_t g_task1_loops;
@@ -100,8 +43,6 @@ uint32_t g_pulse_ticks = 0;       /* Timer ticks per pulse. */
 uint32_t g_period_ticks = 0;      /* Timer ticks per period between pulses. */
 uint32_t g_msg_wait_ticks = 0;    /* Minimum timer ticks between sending messages. */
 
-static jerRingbufferType wiegand_buffer = {0};
-
 void
 wiegand_timer_cb(void *arg)
 {
@@ -109,11 +50,27 @@ wiegand_timer_cb(void *arg)
   static int pulse_pin;
   static int in_pulse = 0;
   static wiegand_msg_t msg = {0};
+  struct ringbuf_iter it;
+  uint8_t *entry = NULL;
 
   if (msg.bit_len == 0) {
+    rb_iter_start(&msg_buf_rb, &it);
+
+    entry = rb_iter_next(&msg_buf_rb, &it);
     /* No current message, but there may be one waiting. */
-    if (jerRingbufferDequeue(&wiegand_buffer, &msg)) {
-      /* Message ready to send, will start sending below... */
+    if (entry != NULL) {
+      /* Message ready to send */
+      memcpy(&msg, entry, sizeof(msg));
+
+     /* This doesn't seem right, but it doesn't seem like it's possible to empty a single item
+      * out of the ringbuf with rb_flush_to. */
+     if (entry == msg_buf_rb.head) {
+       rb_flush(&msg_buf_rb);
+     } else {
+       rb_flush_to(&msg_buf_rb, entry + sizeof(msg));
+     }
+
+      /* Will start sending below... */
     } else {
       /* No messages waiting. Sleep the timer for a while. */
       hal_timer_start(&g_wiegand_timer, 2000);
@@ -126,10 +83,11 @@ wiegand_timer_cb(void *arg)
   if (in_pulse) {
     /* Pulse complete, pin goes back to active. */
     hal_gpio_write(pulse_pin, ACTIVE);
+
     in_pulse = 0;
     bit_index++;
 
-    if (bit_index > msg.bit_len) {
+    if (bit_index >= msg.bit_len) {
       /* Message complete, this was the last pulse. */
       bit_index = 0;
       msg.bit_len = 0;
@@ -143,7 +101,7 @@ wiegand_timer_cb(void *arg)
     return;
   }
 
-  if ((msg.data[bit_index / 8] & (1 << (bit_index % 8))) != 0) {
+  if ((msg.data[bit_index / 8] & (1 << (7 - bit_index % 8))) != 0) {
     pulse_pin = g_d1_pin;
   } else {
     pulse_pin = g_d0_pin;
@@ -165,20 +123,18 @@ wiegand_init(void)
   g_d0_pin = MYNEWT_VAL(WIEGAND_D0_PIN);
   g_d1_pin = MYNEWT_VAL(WIEGAND_D1_PIN);
 
-  rc = hal_gpio_init_out(g_d0_pin, HAL_GPIO_PULL_NONE);
+  rc = hal_gpio_init_out(g_d0_pin, ACTIVE);
   assert(rc == 0);
 
-  rc = hal_gpio_init_out(g_d1_pin, HAL_GPIO_PULL_NONE);
+  rc = hal_gpio_init_out(g_d1_pin, ACTIVE);
   assert(rc == 0);
-
-  hal_gpio_write(g_d0_pin, ACTIVE);
-  hal_gpio_write(g_d1_pin, ACTIVE);
 
   WIEGAND_LOG(INFO, "wiegand_init: D0: %d, D1: %d. Ready\n",
       g_d0_pin,
       g_d1_pin);
 
-  jerRingbufferInit(&wiegand_buffer);
+  rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
+  assert(rc == 0);
 
   /* Each platform will require timer configuration. */
 #ifdef NRF52
@@ -234,5 +190,5 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
   msg.len = len;
   memcpy(msg.data, wiegand_data, len);
 
-  jerRingbufferEnqueue(&wiegand_buffer, &msg);
+  rb_append(&msg_buf_rb, &msg, sizeof(msg));
 }
