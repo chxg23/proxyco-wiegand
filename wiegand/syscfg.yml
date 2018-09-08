@@ -23,6 +23,10 @@ syscfg.defs:
     description: 'Minimum wait between Wiegand message sends, in microseconds.'
     value: 100000
 
+  WIEGAND_MSG_QUEUE_WAIT_LEN:
+    description: 'Time between checking Wiegand message queue, in microseconds.'
+    value: 10000
+
   WIEGAND_NRF_TIMER:
     description: 'Use this system timer. Only applies to nRF52 targets.'
     value: 3
