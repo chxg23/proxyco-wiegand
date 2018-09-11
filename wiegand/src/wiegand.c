@@ -161,6 +161,7 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
   msg.len = len;
   memcpy(msg.data, wiegand_data, len);
 
+  /* TODO: Check for ringbuffer overflow. Best to implement in ringbuf library. */
   rb_append(&msg_buf_rb, &msg, sizeof(msg));
 
   return WIEGAND_WRITE_SUCCESS;
