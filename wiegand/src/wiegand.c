@@ -75,7 +75,14 @@ wiegand_timer_cb(void *arg)
         * out of the ringbuf with rb_flush_to. */
        rb_flush(&msg_buf_rb);
      } else {
-       rb_flush_to(&msg_buf_rb, entry + sizeof(msg));
+      /* Step to next item, then flush to it. */
+      entry = rb_iter_next(&msg_buf_rb, &it);
+      if (entry == NULL) {
+        WIEGAND_LOG(CRITICAL, "wiegand: rb_iter_next fell off end?!\n");
+        return;
+      } else {
+        rb_flush_to(&msg_buf_rb, entry);
+      }
      }
 
       /* Will start sending below... */
