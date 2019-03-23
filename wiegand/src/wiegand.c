@@ -41,6 +41,7 @@ static struct ringbuf msg_buf_rb;
 /* GPIO Pins */
 static int g_d0_pin;
 static int g_d1_pin;
+static int g_ctrl_enable_pin;
 
 static struct hal_timer g_wiegand_timer;
 
@@ -199,6 +200,15 @@ wiegand_init(void)
   WIEGAND_LOG(INFO, "wiegand_init: D0: %d, D1: %d. Ready\n",
       g_d0_pin,
       g_d1_pin);
+
+  if (MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN) != WIEGAND_NO_GPIO) {
+    g_ctrl_enable_pin = MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN);
+    rc = hal_gpio_init_out(g_ctrl_enable_pin, ACTIVE);
+    assert(rc == 0);
+    hal_gpio_write(g_ctrl_enable_pin, 1);
+
+    WIEGAND_LOG(INFO, "wiegand_init: g_ctrl_enable_pin=%d.\n", g_ctrl_enable_pin);
+  }
 
   rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
   assert(rc == 0);

@@ -11,6 +11,10 @@ syscfg.defs:
     description: 'GPIO pin to use for Wiegand Out D1'
     value: WIEGAND_NO_GPIO
 
+  WIEGAND_CTRL_ENABLE_PIN:
+    description: 'GPIO pin to enable Wiegand control.'
+    value: WIEGAND_NO_GPIO
+
   WIEGAND_PULSE_LEN:
     description: 'Length in microseconds of data pulse.'
     value: 50
