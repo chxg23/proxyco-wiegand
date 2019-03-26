@@ -24,6 +24,14 @@
 #define INACTIVE  (0)
 #endif
 
+#if (MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN) != WIEGAND_NO_GPIO)
+#define WIEGAND_CRTL_ENABLE               (1)
+#define WIEGAND_CTRL_ENABLE_OFF           (0)
+#define WIEGAND_CTRL_ENABLE_ON            (1)
+#define WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS (WIEGAND_MSG_MAX_LEN * 2)
+static int g_ctrl_enable_pin;
+#endif
+
 /* Buffer of outgoing Wiegand Messages */
 #define MSG_BUF_NUM (10)
 #define MSG_BUF_LEN (MSG_BUF_NUM * sizeof(wiegand_msg_t))
@@ -41,7 +49,6 @@ static struct ringbuf msg_buf_rb;
 /* GPIO Pins */
 static int g_d0_pin;
 static int g_d1_pin;
-static int g_ctrl_enable_pin;
 
 static struct hal_timer g_wiegand_timer;
 
@@ -61,6 +68,20 @@ wiegand_timer_cb(void *arg)
   static wiegand_msg_t msg = {0};
   struct ringbuf_iter it;
   uint8_t *entry = NULL;
+#ifdef WIEGAND_CRTL_ENABLE
+  static int wiegand_ctrl_enable_timeout = WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS;
+
+  /* This is a safety mechanism to catch us if get stuck somewhere, to make sure that we turn off
+   * Wiegand control. We decrement it on every tick, if it runs out, we turn off Wiegand control. */
+
+  if (wiegand_ctrl_enable_timeout > 0) {
+    wiegand_ctrl_enable_timeout--;
+  }
+
+  if (wiegand_ctrl_enable_timeout <= 0) {
+    hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+  }
+#endif
 
   if (msg.bit_len == 0) {
     rb_iter_start(&msg_buf_rb, &it);
@@ -86,10 +107,20 @@ wiegand_timer_cb(void *arg)
       }
      }
 
+#ifdef WIEGAND_CRTL_ENABLE
+      /* Turn on Wiegand control before trying to send! */
+      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_ON);
+      wiegand_ctrl_enable_timeout = WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS;
+#endif
+
       /* Will start sending below... */
     } else {
       /* No messages waiting. Sleep the timer for a while. */
       hal_timer_start(&g_wiegand_timer, g_msg_queue_wait_ticks);
+#ifdef WIEGAND_CRTL_ENABLE
+      /* Turn off Wiegand control between messages. */
+      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+#endif
       return;
     }
   }
@@ -109,6 +140,10 @@ wiegand_timer_cb(void *arg)
 
       /* Message complete, sleep the timer. TODO: Should this be a much longer, specific wait? */
       hal_timer_start(&g_wiegand_timer, g_msg_wait_ticks);
+#ifdef WIEGAND_CRTL_ENABLE
+      /* Turn off Wiegand control between messages. */
+      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+#endif
       return;
     }
 
@@ -201,14 +236,14 @@ wiegand_init(void)
       g_d0_pin,
       g_d1_pin);
 
-  if (MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN) != WIEGAND_NO_GPIO) {
+#ifdef WIEGAND_CRTL_ENABLE
     g_ctrl_enable_pin = MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN);
-    rc = hal_gpio_init_out(g_ctrl_enable_pin, ACTIVE);
+    rc = hal_gpio_init_out(g_ctrl_enable_pin, 0);
     assert(rc == 0);
-    hal_gpio_write(g_ctrl_enable_pin, 1);
+    hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_DISABLE);
 
-    WIEGAND_LOG(INFO, "wiegand_init: g_ctrl_enable_pin=%d.\n", g_ctrl_enable_pin);
-  }
+    WIEGAND_LOG(INFO, "wiegand_init: g_ctrl_enable_pin=%d\n", g_ctrl_enable_pin);
+#endif
 
   rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
   assert(rc == 0);
