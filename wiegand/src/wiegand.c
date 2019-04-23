@@ -28,8 +28,10 @@
 #define WIEGAND_CRTL_ENABLE               (1)
 #define WIEGAND_CTRL_ENABLE_OFF           (0)
 #define WIEGAND_CTRL_ENABLE_ON            (1)
+/* Number of ticks of the Wiegand IO timer before timing out the WIEGAND_CTRL_ENABLE_PIN. Set to double the
+ * maximum number of bits in a Wiegand message to make sure that the longest possible message has time to
+ * go out. */
 #define WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS (WIEGAND_MSG_MAX_LEN * 2)
-static int g_ctrl_enable_pin;
 #endif
 
 /* Buffer of outgoing Wiegand Messages */
@@ -45,10 +47,6 @@ static int g_ctrl_enable_pin;
 
 static uint8_t msg_buf[MSG_BUF_LEN] = {0};
 static struct ringbuf msg_buf_rb;
-
-/* GPIO Pins */
-static int g_d0_pin;
-static int g_d1_pin;
 
 static struct hal_timer g_wiegand_timer;
 
@@ -79,7 +77,7 @@ wiegand_timer_cb(void *arg)
   }
 
   if (wiegand_ctrl_enable_timeout <= 0) {
-    hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+    hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
   }
 #endif
 
@@ -109,7 +107,7 @@ wiegand_timer_cb(void *arg)
 
 #ifdef WIEGAND_CRTL_ENABLE
       /* Turn on Wiegand control before trying to send! */
-      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_ON);
+      hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_ON);
       wiegand_ctrl_enable_timeout = WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS;
 #endif
 
@@ -119,7 +117,7 @@ wiegand_timer_cb(void *arg)
       hal_timer_start(&g_wiegand_timer, g_msg_queue_wait_ticks);
 #ifdef WIEGAND_CRTL_ENABLE
       /* Turn off Wiegand control between messages. */
-      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+      hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
 #endif
       return;
     }
@@ -142,7 +140,7 @@ wiegand_timer_cb(void *arg)
       hal_timer_start(&g_wiegand_timer, g_msg_wait_ticks);
 #ifdef WIEGAND_CRTL_ENABLE
       /* Turn off Wiegand control between messages. */
-      hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_ENABLE_OFF);
+      hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
 #endif
       return;
     }
@@ -153,9 +151,9 @@ wiegand_timer_cb(void *arg)
 
   /* Calculate the appropriate pin to pulse. */
   if ((msg.data[bit_index / 8] & (1 << (7 - bit_index % 8))) != 0) {
-    pulse_pin = g_d0_pin;
+    pulse_pin = MYNEWT_VAL(WIEGAND_D0_PIN);
   } else {
-    pulse_pin = g_d1_pin;
+    pulse_pin = MYNEWT_VAL(WIEGAND_D1_PIN);
   }
 
   /* Start pulse by setting pin inactive. */
@@ -223,26 +221,21 @@ wiegand_init(void)
 {
   int rc = 0;
 
-  g_d0_pin = MYNEWT_VAL(WIEGAND_D0_PIN);
-  g_d1_pin = MYNEWT_VAL(WIEGAND_D1_PIN);
-
-  rc = hal_gpio_init_out(g_d0_pin, ACTIVE);
+  rc = hal_gpio_init_out(MYNEWT_VAL(WIEGAND_D0_PIN), ACTIVE);
   assert(rc == 0);
 
-  rc = hal_gpio_init_out(g_d1_pin, ACTIVE);
+  rc = hal_gpio_init_out(MYNEWT_VAL(WIEGAND_D1_PIN), ACTIVE);
   assert(rc == 0);
 
   WIEGAND_LOG(INFO, "wiegand_init: D0: %d, D1: %d. Ready\n",
-      g_d0_pin,
-      g_d1_pin);
+      MYNEWT_VAL(WIEGAND_D0_PIN),
+      MYNEWT_VAL(WIEGAND_D1_PIN));
 
 #ifdef WIEGAND_CRTL_ENABLE
-    g_ctrl_enable_pin = MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN);
-    rc = hal_gpio_init_out(g_ctrl_enable_pin, 0);
+    rc = hal_gpio_init_out(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
     assert(rc == 0);
-    hal_gpio_write(g_ctrl_enable_pin, WIEGAND_CTRL_DISABLE);
 
-    WIEGAND_LOG(INFO, "wiegand_init: g_ctrl_enable_pin=%d\n", g_ctrl_enable_pin);
+    WIEGAND_LOG(INFO, "wiegand_init: MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN)=%d\n", MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN));
 #endif
 
   rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
