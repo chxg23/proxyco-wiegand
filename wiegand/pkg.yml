@@ -9,3 +9,4 @@ pkg.deps:
     - "@proxyco-ringbuf/ringbuf"
     - "@apache-mynewt-core/hw/hal"
     - "@apache-mynewt-core/sys/log/full"
+    - "@apache-mynewt-core/sys/log/modlog"
