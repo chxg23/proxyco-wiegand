@@ -35,6 +35,6 @@ syscfg.defs:
     description: 'Use this system timer. Only applies to nRF52 targets.'
     value: 3
 
-   WIEGAND_LOG_MODULE:
+  WIEGAND_LOG_MODULE:
      description: 'Numeric module ID to use for wiegand library log messages'
      value: 250
