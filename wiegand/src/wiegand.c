@@ -241,7 +241,7 @@ wiegand_init(void)
   rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
   assert(rc == 0);
 
-#ifdef NRF52
+#if MYNEWT_VAL(BSP_NRF52) || MYNEWT_VAL(BSP_NRF52840)
   rc = hal_timer_config(MYNEWT_VAL(WIEGAND_NRF_TIMER), NRF_TIMER_FREQ);
   assert(rc == 0);
 
