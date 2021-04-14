@@ -45,6 +45,9 @@
 /* Timer adjust offset, empirically determined. */
 #define NRF_TIMER_ADJ     (4)
 
+/* Find minimum bytes to represent number of bits */
+#define WIEGAND_BITS_TO_BYTES(bits)      (((bits) >> 3) + (((bits) & 0x7) != 0))
+
 static uint8_t msg_buf[MSG_BUF_LEN] = {0};
 static struct ringbuf msg_buf_rb;
 
@@ -181,6 +184,7 @@ wiegand_write_result_t
 wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
 {
   wiegand_msg_t msg;
+  uint8_t len_bytes;
 
   assert(wiegand_data != NULL);
 
@@ -196,11 +200,14 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
     return WIEGAND_WRITE_INSUFFICENT_BITS;
   }
 
-  WIEGAND_LOG(INFO, "wiegand_write: %lu bits\n", wiegand_bits);
+  /* Get appropriate number of bytes to copy */
+  len_bytes = WIEGAND_BITS_TO_BYTES(wiegand_bits);
+
+  WIEGAND_LOG(INFO, "wiegand_write: %lu bits, %d bytes\n", wiegand_bits, len_bytes);
 
   msg.bit_len = wiegand_bits;
-  msg.len = len;
-  memcpy(msg.data, wiegand_data, len);
+  msg.len = len_bytes;
+  memcpy(msg.data, wiegand_data, len_bytes);
 
   /* TODO: Check for ringbuffer overflow. Best to implement in ringbuf library. */
   rb_append(&msg_buf_rb, &msg, sizeof(msg));
