@@ -52,7 +52,8 @@
 
 /* Timer frequency value. */
 #define NRF_TIMER_FREQ    (16000000)
-/* Timer adjust offset, empirically determined. */
+/* Timer adjust offset, empirically determined. 
+   TODO: determine why this is needed (CT-3389) */
 #define NRF_TIMER_ADJ     (4)
 
 /* Find minimum bytes to represent number of bits */
@@ -127,6 +128,8 @@ wiegand_timer_cb(void *arg)
       __HAL_ENABLE_INTERRUPTS(sr);
       return;
     }
+
+
   }
 
   /* Calculate the appropriate pin to pulse. */
@@ -138,7 +141,7 @@ wiegand_timer_cb(void *arg)
    
   /* Start pulse by setting pin inactive. */
   hal_gpio_write(pulse_pin, INACTIVE);
-  /* Block for WIEGAND_PULSE_LEN uS */
+  /* Block for WIEGAND_PULSE_LEN uS (minus timer adjustment offset) */
   wiegand_timer_delay_usecs(MYNEWT_VAL(WIEGAND_PULSE_LEN) - NRF_TIMER_ADJ);
   /* Pulse complete, pin goes back to active. */
   hal_gpio_write(pulse_pin, ACTIVE);

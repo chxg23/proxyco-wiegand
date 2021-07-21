@@ -28,10 +28,10 @@ static struct hal_timer g_wiegand_timer;
 static uint32_t
 timer_get32(void)
 {
-    uint32_t cpu_time;
+    uint32_t time_cnt;
 
-    cpu_time = hal_timer_read(MYNEWT_VAL(WIEGAND_NRF_TIMER));
-    return cpu_time;
+    time_cnt = hal_timer_read(MYNEWT_VAL(WIEGAND_NRF_TIMER));
+    return time_cnt;
 }
 
 static void
@@ -63,10 +63,10 @@ int
 wiegand_timer_relative(uint32_t usecs)
 {
     int rc;
-    uint32_t cputime;
+    uint32_t time_cnt;
 
-    cputime = timer_get32() + usecs * ticks_per_usec;
-    rc = hal_timer_start_at(&g_wiegand_timer, cputime);
+    time_cnt = timer_get32() + usecs * ticks_per_usec;
+    rc = hal_timer_start_at(&g_wiegand_timer, time_cnt);
 
     return rc;
 }

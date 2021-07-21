@@ -11,7 +11,7 @@ void wiegand_timer_delay_usecs(uint32_t usecs);
 
 /**
  * Sets a high resolution timer that will expire 'usecs' microseconds from the current
- * cputime.
+ * Wiegand timer value.
  *
  * NOTE: This must be called when the timer is stopped.
  *
