@@ -11,9 +11,19 @@
 #include <bsp/bsp.h>
 #include <string.h>
 #include <console/console.h>
+
+#if MYNEWT_VAL(BSP_NRF52) || MYNEWT_VAL(BSP_NRF52840)
+#include <mcu/nrf52_hal.h>
+#elif MYNEWT_VAL(BSP_NRF5340)
+  #include <mcu/nrf5340_hal.h>
+#else
+  #error "Platform not supported"
+#endif
+
 #include "ringbuf/ringbuf.h"
 #include "wiegand.h"
 #include "wiegand_log.h"
+#include "wiegand_timer.h"
 
 /* Active-high or Active-low logic is configurable. */
 #if MYNEWT_VAL(WIEGAND_ACTIVE_LOW)
@@ -41,8 +51,9 @@
 /* Timer configuration. Note that each platform will require custom timer configuration! */
 
 /* Timer frequency value. */
-#define NRF_TIMER_FREQ    (400000)
-/* Timer adjust offset, empirically determined. */
+#define NRF_TIMER_FREQ    (16000000)
+/* Timer adjust offset, empirically determined. 
+   TODO: determine why this is needed (CT-3389) */
 #define NRF_TIMER_ADJ     (4)
 
 /* Find minimum bytes to represent number of bits */
@@ -51,21 +62,13 @@
 static uint8_t msg_buf[MSG_BUF_LEN] = {0};
 static struct ringbuf msg_buf_rb;
 
-static struct hal_timer g_wiegand_timer;
-
-/* These values are all computed based on the platform-specific timer and the relevant syscfg values. */
-static uint32_t g_timer_resolution = 0;       /* Actual timer resolution achieved. */
-static uint32_t g_pulse_ticks = 0;            /* Timer ticks per pulse. */
-static uint32_t g_period_ticks = 0;           /* Timer ticks per period between pulses. */
-static uint32_t g_msg_wait_ticks = 0;         /* Minimum timer ticks between sending messages. */
-static uint32_t g_msg_queue_wait_ticks = 0;   /* Wait time in ticks between checking message queue. */
-
 void
 wiegand_timer_cb(void *arg)
 {
+  uint32_t sr;
+  __HAL_DISABLE_INTERRUPTS(sr);
   static int bit_index = 0;
   static int pulse_pin;
-  static int in_pulse = 0;
   static wiegand_msg_t msg = {0};
   struct ringbuf_iter it;
   uint8_t *entry = NULL;
@@ -101,7 +104,7 @@ wiegand_timer_cb(void *arg)
       /* Step to next item, then flush to it. */
       entry = rb_iter_next(&msg_buf_rb, &it);
       if (entry == NULL) {
-        WIEGAND_LOG(CRITICAL, "wiegand: rb_iter_next fell off end?!\n");
+        __HAL_ENABLE_INTERRUPTS(sr);
         return;
       } else {
         rb_flush_to(&msg_buf_rb, entry);
@@ -117,39 +120,16 @@ wiegand_timer_cb(void *arg)
       /* Will start sending below... */
     } else {
       /* No messages waiting. Sleep the timer for a while. */
-      hal_timer_start(&g_wiegand_timer, g_msg_queue_wait_ticks);
+      wiegand_timer_relative(MYNEWT_VAL(WIEGAND_MSG_QUEUE_WAIT_LEN));
 #ifdef WIEGAND_CRTL_ENABLE
       /* Turn off Wiegand control between messages. */
       hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
 #endif
-      return;
-    }
-  }
-
-  /* We're in the process of sending a Wiegand message. */
-  if (in_pulse) {
-    /* Pulse complete, pin goes back to active. */
-    hal_gpio_write(pulse_pin, ACTIVE);
-
-    in_pulse = 0;
-    bit_index++;
-
-    if (bit_index >= msg.bit_len) {
-      /* Message complete, this was the last pulse. */
-      bit_index = 0;
-      msg.bit_len = 0;
-
-      /* Message complete, sleep the timer. TODO: Should this be a much longer, specific wait? */
-      hal_timer_start(&g_wiegand_timer, g_msg_wait_ticks);
-#ifdef WIEGAND_CRTL_ENABLE
-      /* Turn off Wiegand control between messages. */
-      hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
-#endif
+      __HAL_ENABLE_INTERRUPTS(sr);
       return;
     }
 
-    hal_timer_start(&g_wiegand_timer, g_period_ticks);
-    return;
+
   }
 
   /* Calculate the appropriate pin to pulse. */
@@ -158,17 +138,38 @@ wiegand_timer_cb(void *arg)
   } else {
     pulse_pin = MYNEWT_VAL(WIEGAND_D1_PIN);
   }
-
+   
   /* Start pulse by setting pin inactive. */
   hal_gpio_write(pulse_pin, INACTIVE);
-  in_pulse = 1;
-  hal_timer_start(&g_wiegand_timer, g_pulse_ticks);
+  /* Block for WIEGAND_PULSE_LEN uS (minus timer adjustment offset) */
+  wiegand_timer_delay_usecs(MYNEWT_VAL(WIEGAND_PULSE_LEN) - NRF_TIMER_ADJ);
+  /* Pulse complete, pin goes back to active. */
+  hal_gpio_write(pulse_pin, ACTIVE);
 
+  bit_index++;
+
+  if (bit_index >= msg.bit_len) {
+      /* Message complete, this was the last pulse. */
+      bit_index = 0;
+      memset(&msg, 0, sizeof(msg));
+#ifdef WIEGAND_CRTL_ENABLE
+      /* Turn off Wiegand control between messages. */
+      hal_gpio_write(MYNEWT_VAL(WIEGAND_CTRL_ENABLE_PIN), WIEGAND_CTRL_ENABLE_OFF);
+#endif
+      wiegand_timer_relative(MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN));
+     __HAL_ENABLE_INTERRUPTS(sr);
+      return;
+  }
+
+  __HAL_ENABLE_INTERRUPTS(sr);
+
+  wiegand_timer_relative(MYNEWT_VAL(WIEGAND_PERIOD_LEN));
+  
 }
 
 /**
- * Write wiegand message. Send message of *wiegand_data (of len len) and 
- * wiegand_bits. Messages are sent by placing them in a ringbuffer, which is
+ * Write wiegand message. Send message of wiegand_data (of length len and 
+ * wiegand_bits). Messages are sent by placing them in a ringbuffer, which is
  * cleared by an interrupt-driven timer in order to avoid blocking the appliction.
  * 
  * wiegand_bits   Number of bits in the Wiegand message.
@@ -248,28 +249,6 @@ wiegand_init(void)
   rc = rb_init(&msg_buf_rb, msg_buf, sizeof(msg_buf), sizeof(wiegand_msg_t));
   assert(rc == 0);
 
-#if MYNEWT_VAL(BSP_NRF52) || MYNEWT_VAL(BSP_NRF52840) || MYNEWT_VAL(BSP_NRF5340)
-  rc = hal_timer_config(MYNEWT_VAL(WIEGAND_NRF_TIMER), NRF_TIMER_FREQ);
+  rc = wiegand_timer_init(NRF_TIMER_FREQ, wiegand_timer_cb);
   assert(rc == 0);
-
-  g_timer_resolution = hal_timer_get_resolution(MYNEWT_VAL(WIEGAND_NRF_TIMER));
-
-  g_pulse_ticks = (MYNEWT_VAL(WIEGAND_PULSE_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
-  g_period_ticks = (MYNEWT_VAL(WIEGAND_PERIOD_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
-  g_msg_wait_ticks = (MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
-  g_msg_queue_wait_ticks = (MYNEWT_VAL(WIEGAND_MSG_QUEUE_WAIT_LEN) * 1000) / g_timer_resolution - NRF_TIMER_ADJ;
-
-  WIEGAND_LOG(INFO, "wiegand_init: nRF Timer - Freq: %d Rez: %lu, pulse_ticks: %lu, period_ticks: %lu\n",
-      NRF_TIMER_FREQ,
-      g_timer_resolution,
-      g_pulse_ticks,
-      g_period_ticks
-  );
-
-  hal_timer_set_cb(MYNEWT_VAL(WIEGAND_NRF_TIMER), &g_wiegand_timer, wiegand_timer_cb, NULL);
-  assert(rc == 0);
-
-  rc = hal_timer_start(&g_wiegand_timer, 1);
-  assert(rc == 0);
-#endif
 }
