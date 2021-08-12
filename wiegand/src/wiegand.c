@@ -62,10 +62,10 @@
 static uint8_t msg_buf[MSG_BUF_LEN] = {0};
 static struct ringbuf msg_buf_rb;
 
-void
+static inline void
 wiegand_timer_cb(void *arg)
 {
-  uint32_t sr;
+  static uint32_t sr;
   __HAL_DISABLE_INTERRUPTS(sr);
   static int bit_index = 0;
   static int pulse_pin;
@@ -145,6 +145,10 @@ wiegand_timer_cb(void *arg)
   wiegand_timer_delay_usecs(MYNEWT_VAL(WIEGAND_PULSE_LEN) - NRF_TIMER_ADJ);
   /* Pulse complete, pin goes back to active. */
   hal_gpio_write(pulse_pin, ACTIVE);
+#if MYNEWT_VAL(WIEGAND_PULSE_PERIOD_BLOCK)
+  /* Block for WIEGAND_PERIOD_LEN uS (minus timer adjustment offset) */
+  wiegand_timer_delay_usecs(MYNEWT_VAL(WIEGAND_PERIOD_LEN) - NRF_TIMER_ADJ);
+#endif
 
   bit_index++;
 
@@ -160,10 +164,14 @@ wiegand_timer_cb(void *arg)
      __HAL_ENABLE_INTERRUPTS(sr);
       return;
   }
-
+  
+  /* Reschedule the next bit transmission as soon as possible */
+#if MYNEWT_VAL(WIEGAND_PULSE_PERIOD_BLOCK)
+  wiegand_timer_relative(0);
+#else
+  wiegand_timer_relative(MYNEWT_VAL(WIEGAND_PULSE_LEN) - NRF_TIMER_ADJ);
+#endif
   __HAL_ENABLE_INTERRUPTS(sr);
-
-  wiegand_timer_relative(MYNEWT_VAL(WIEGAND_PERIOD_LEN));
   
 }
 
