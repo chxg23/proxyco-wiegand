@@ -17,6 +17,11 @@ typedef struct {
   uint8_t data[WIEGAND_MSG_MAX_BYTES];
 } wiegand_msg_t;
 
+/* Stop Wiegand timer */
+int wiegand_timer_stop(void);
+/* Start Wiegand timer */
+int wiegand_timer_start(void);
+
 /**
  * Initialize Wiegand library. Configures GPIO pins, wiegand message ringbuffer,
  * and timer-based interrupt for non-blocking high-frequency I/O. See syscfg.yml
