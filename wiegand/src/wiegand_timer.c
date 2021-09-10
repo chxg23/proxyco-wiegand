@@ -101,6 +101,9 @@ wiegand_timer_init(uint32_t clock_freq,hal_timer_cb fp )
     ticks_per_usec = clock_freq / 1000000U;
 
     rc = hal_timer_config(MYNEWT_VAL(WIEGAND_NRF_TIMER), clock_freq);
+    if (rc) {
+        return rc;
+    }
 
     timer_init(&g_wiegand_timer, fp, NULL);
 

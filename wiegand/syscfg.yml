@@ -11,6 +11,10 @@ syscfg.defs:
     description: 'GPIO pin to use for Wiegand Out D1'
     value: WIEGAND_NO_GPIO
 
+  WIEGAND_PULSE_PERIOD_BLOCK:
+    description: 'Enable blocking (and hence high precision timing) during the Wiegand bit transmission period'
+    value: 0
+
   WIEGAND_CTRL_ENABLE_PIN:
     description: 'GPIO pin to enable Wiegand control.'
     value: WIEGAND_NO_GPIO
@@ -32,8 +36,12 @@ syscfg.defs:
     value: 10000
 
   WIEGAND_NRF_TIMER:
-    description: 'Use this system timer. Only applies to nRF52 targets.'
+    description: 'Use this system timer. Only applies to Nordic targets.'
     value: 3
+    restrictions:
+      - '((TIMER_0 && (WIEGAND_NRF_TIMER == 0)) || (TIMER_1 && (WIEGAND_NRF_TIMER == 1)) ||
+          (TIMER_2 && (WIEGAND_NRF_TIMER == 2)) || (TIMER_3 && (WIEGAND_NRF_TIMER == 3)) ||
+          (TIMER_4 && (WIEGAND_NRF_TIMER == 4)) || (TIMER_5 && (WIEGAND_NRF_TIMER == 5)))'
 
   WIEGAND_LOG_MODULE:
      description: 'Numeric module ID to use for wiegand library log messages'
