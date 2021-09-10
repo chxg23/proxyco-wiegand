@@ -82,6 +82,18 @@ wiegand_timer_delay_usecs(uint32_t usecs)
 }
 
 int
+wiegand_timer_stop(void)
+{
+  return hal_timer_stop(&g_wiegand_timer);
+}
+
+int
+wiegand_timer_start(void)
+{
+  return hal_timer_start(&g_wiegand_timer, 0);
+}
+
+int
 wiegand_timer_init(uint32_t clock_freq,hal_timer_cb fp )
 {
     int rc;
@@ -95,5 +107,5 @@ wiegand_timer_init(uint32_t clock_freq,hal_timer_cb fp )
 
     timer_init(&g_wiegand_timer, fp, NULL);
 
-    return hal_timer_start(&g_wiegand_timer, 0);
+    return rc;
 }
