@@ -61,6 +61,8 @@
 
 static uint8_t msg_buf[MSG_BUF_LEN] = {0};
 static struct ringbuf msg_buf_rb;
+static struct os_sem g_wiegand_sem;
+static uint8_t g_wiegand_busy;
 
 static inline void
 wiegand_timer_cb(void *arg)
@@ -72,6 +74,7 @@ wiegand_timer_cb(void *arg)
   static wiegand_msg_t msg = {0};
   struct ringbuf_iter it;
   uint8_t *entry = NULL;
+  os_error_t err; 
 #ifdef WIEGAND_CRTL_ENABLE
   static int wiegand_ctrl_enable_timeout = WIEGAND_CTRL_ENABLE_TIMEOUT_TICKS;
 
@@ -153,6 +156,10 @@ wiegand_timer_cb(void *arg)
   bit_index++;
 
   if (bit_index >= msg.bit_len) {
+      wiegand_timer_stop();
+      err = os_sem_release(&g_wiegand_sem);
+      assert(err == OS_OK);
+      g_wiegand_busy = 0;
       /* Message complete, this was the last pulse. */
       bit_index = 0;
       memset(&msg, 0, sizeof(msg));
@@ -194,8 +201,17 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
 {
   wiegand_msg_t msg;
   uint8_t len_bytes;
+  os_error_t err;
+  int rc;
 
   assert(wiegand_data != NULL);
+
+  if (g_wiegand_busy) {
+    WIEGAND_LOG(ERROR, "wiegand_write: failed, busy\n");
+    return WIEGAND_BUSY;
+  }
+
+  g_wiegand_busy = 1;
 
   memset(&msg, 0, sizeof(wiegand_msg_t));
 
@@ -218,8 +234,18 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
   msg.len = len_bytes;
   memcpy(msg.data, wiegand_data, len_bytes);
 
+  rc = wiegand_timer_start();
+  if (rc) {
+    return WIEGAND_TIMER_FAILURE;
+  }
+
   /* TODO: Check for ringbuffer overflow. Best to implement in ringbuf library. */
   rb_append(&msg_buf_rb, &msg, sizeof(msg));
+
+  err = os_sem_pend(&g_wiegand_sem, MYNEWT_VAL(WIEGAND_SEM_TMO_TICKS));
+  if (err == OS_TIMEOUT) {
+    return WIEGAND_WRITE_FAILURE_TMO;
+  }
 
   return WIEGAND_WRITE_SUCCESS;
 }
@@ -258,5 +284,8 @@ wiegand_init(void)
   assert(rc == 0);
 
   rc = wiegand_timer_init(NRF_TIMER_FREQ, wiegand_timer_cb);
+  assert(rc == 0);
+
+  rc = os_sem_init(&g_wiegand_sem, 0);
   assert(rc == 0);
 }
