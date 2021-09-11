@@ -156,7 +156,6 @@ wiegand_timer_cb(void *arg)
   bit_index++;
 
   if (bit_index >= msg.bit_len) {
-      wiegand_timer_stop();
       err = os_sem_release(&g_wiegand_sem);
       assert(err == OS_OK);
       g_wiegand_busy = 0;
@@ -169,6 +168,7 @@ wiegand_timer_cb(void *arg)
 #endif
       wiegand_timer_relative(MYNEWT_VAL(WIEGAND_MSG_WAIT_LEN));
      __HAL_ENABLE_INTERRUPTS(sr);
+      wiegand_timer_stop();
       return;
   }
   
@@ -236,6 +236,7 @@ wiegand_write(uint32_t wiegand_bits, uint8_t *wiegand_data, uint8_t len)
 
   rc = wiegand_timer_start();
   if (rc) {
+    WIEGAND_LOG(ERROR, "wiegand_write: timer start failed; rc=%d\n", rc);
     return WIEGAND_TIMER_FAILURE;
   }
 
