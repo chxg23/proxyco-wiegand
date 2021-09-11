@@ -13,7 +13,7 @@ syscfg.defs:
 
   WIEGAND_PULSE_PERIOD_BLOCK:
     description: 'Enable blocking (and hence high precision timing) during the Wiegand bit transmission period'
-    value: 0
+    value: 1
 
   WIEGAND_CTRL_ENABLE_PIN:
     description: 'GPIO pin to enable Wiegand control.'
@@ -48,7 +48,7 @@ syscfg.defs:
     value: 250
 
   WIEGAND_SEM_TMO_TICKS:
-    description: 'Time in ticks to timeout wiegand semaphore, time for one bit on wiegand is almost 53 us,
-                  max message length is 200, so worst case it could take 10.6ms, hence we take something greater
-                  than that, 2 ticks = 2 * 7.8ms ~ 15ms'
-    value: 2
+    description: 'Time in ticks to timeout wiegand semaphore, time for one bit on wiegand is 40 us with 2ms period between bits &
+                  max message length is 200, so worst case it could take 406ms, hence we take something greater
+                  than that, 53 ticks = 53 * 7.8ms ~ 413ms'
+    value: 53
