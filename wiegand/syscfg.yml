@@ -44,5 +44,11 @@ syscfg.defs:
           (TIMER_4 && (WIEGAND_NRF_TIMER == 4)) || (TIMER_5 && (WIEGAND_NRF_TIMER == 5)))'
 
   WIEGAND_LOG_MODULE:
-     description: 'Numeric module ID to use for wiegand library log messages'
-     value: 250
+    description: 'Numeric module ID to use for wiegand library log messages'
+    value: 250
+
+  WIEGAND_SEM_TMO_TICKS:
+    description: 'Time in ticks to timeout wiegand semaphore, time for one bit on wiegand is almost 53 us,
+                  max message length is 200, so worst case it could take 10.6ms, hence we take something greater
+                  than that, 2 ticks = 2 * 7.8ms ~ 15ms'
+    value: 2
